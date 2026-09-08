@@ -14,7 +14,8 @@ using namespace cv;
 
 void sepFilter2D_8u(const Mat& src, Mat& dst, int ddepth,
                     const Mat& kernelX, const Mat& kernelY) {
-    CV_Assert(src.type() == CV_8UC1);
+    CV_Assert(src.type() == CV_8UC1 || src.type() == CV_8UC3);
+    const int cn = src.channels();
     Mat kx_, ky_;
     kernelX.convertTo(kx_, CV_32F);
     kernelY.convertTo(ky_, CV_32F);
@@ -24,15 +25,16 @@ void sepFilter2D_8u(const Mat& src, Mat& dst, int ddepth,
     const float* ky = ky_.ptr<float>();
     const int rx = kw / 2, ry = kh / 2;
     const int W = src.cols, H = src.rows;
+    const int Wc = W * cn; // плоская ширина (каналы интерливнуты)
     const int outDepth = ddepth < 0 ? CV_8U : ddepth;
     CV_Assert(outDepth == CV_8U || outDepth == CV_32F);
-    dst.create(src.size(), CV_MAKETYPE(outDepth, 1));
+    dst.create(src.size(), CV_MAKETYPE(outDepth, cn));
 
     Mat padded;
     copyMakeBorder(src, padded, ry, kh - 1 - ry, rx, kw - 1 - rx, BORDER_REFLECT_101);
 
-    // фаза 1: горизонталь -> f32
-    Mat hbuf(padded.rows, W, CV_32FC1);
+    // фаза 1: горизонталь -> f32. Для C3: ядро "растянуто" с шагом cn по плоской строке
+    Mat hbuf(padded.rows, Wc, CV_32FC1);
     parallel_for_(Range(0, padded.rows), [&](const Range& rg) {
         for (int y = rg.start; y < rg.end; y++) {
             const uchar* S = padded.ptr<uchar>(y);
@@ -40,18 +42,18 @@ void sepFilter2D_8u(const Mat& src, Mat& dst, int ddepth,
             int x = 0;
 #if CV_SIMD
             const int NF = v_float32::nlanes;
-            for (; x <= W - NF; x += NF) {
+            for (; x <= Wc - NF; x += NF) {
                 v_float32 acc = vx_setzero_f32();
                 for (int k = 0; k < kw; k++) {
-                    v_float32 v = v_cvt_f32(v_reinterpret_as_s32(vx_load_expand_q(S + x + k)));
+                    v_float32 v = v_cvt_f32(v_reinterpret_as_s32(vx_load_expand_q(S + x + k * cn)));
                     acc = v_fma(v, vx_setall_f32(kx[k]), acc);
                 }
                 v_store(D + x, acc);
             }
 #endif
-            for (; x < W; x++) {
+            for (; x < Wc; x++) {
                 float s = 0;
-                for (int k = 0; k < kw; k++) s += S[x + k] * kx[k];
+                for (int k = 0; k < kw; k++) s += S[x + k * cn] * kx[k];
                 D[x] = s;
             }
         }
@@ -69,7 +71,7 @@ void sepFilter2D_8u(const Mat& src, Mat& dst, int ddepth,
                 int x = 0;
 #if CV_SIMD
                 const int NF = v_float32::nlanes;
-                for (; x <= W - NF; x += NF) {
+                for (; x <= Wc - NF; x += NF) {
                     v_float32 acc = vx_setzero_f32();
                     for (int k = 0; k < kh; k++) {
                         const float* pr = hbuf.ptr<float>(y + k);
@@ -88,14 +90,14 @@ void sepFilter2D_8u(const Mat& src, Mat& dst, int ddepth,
 #endif
                 if (toU8) {
                     uchar* dp = dst.ptr<uchar>(y);
-                    for (; x < W; x++) {
+                    for (; x < Wc; x++) {
                         float s = 0;
                         for (int k = 0; k < kh; k++) s += hbuf.ptr<float>(y + k)[x] * ky[k];
                         dp[x] = saturate_cast<uchar>(s);
                     }
                 } else {
                     float* dp = dst.ptr<float>(y);
-                    for (; x < W; x++) {
+                    for (; x < Wc; x++) {
                         float s = 0;
                         for (int k = 0; k < kh; k++) s += hbuf.ptr<float>(y + k)[x] * ky[k];
                         dp[x] = s;

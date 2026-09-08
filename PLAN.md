@@ -222,6 +222,22 @@ onnxruntime-cpu 1.29 2.46 мс. TensorRT в Arch нет (AUR/NVIDIA repo); ож�
 onnxruntime+TensorRT EP или TRT напрямую (требует установки libnvinfer).
 fastcv: 24 кернела.
 
+## Этап 5l. Мультиканальность, FFTW, FFI, photo, регрессия
+- C3: medianBlur8uC3 16.6x bit-exact (split+3xC1; НЕ параллелить по каналам - вложенный
+  parallel_for сериализуется!); sepFilter2D_8u C3 2.0x (плоский проход W*cn, тапы шагом cn);
+  sobel8u16sLarge C3 3.9x bit-exact (тот же трюк)
+- DFT через FFTW (fastcv/src/dft_fftw.cpp): r2c 1.9x (1024) / 2.9x (2048) к нашему патчу;
+  интерьер maxDiff 1.5e-4. ГРАБЛЯ: FFTW_MEASURE перезаписывает данные планируемых массивов -
+  планировать на scratch + FFTW_UNALIGNED + new-array execute; планировщик не thread-safe (мьютекс)
+- photo-стилизации (photo_stylize_fast.cpp): photo-модуль использует собственный legacy
+  Domain_Filter (npr.hpp, img.at<float>() скалярно, 2011 г.) вместо параллельного
+  ximgproc::dtFilter! edgePreserving RECURS 174->14.0 мс (12.5x), NC 496->21.8 (22.7x),
+  detailEnhance 138->23.5 (5.9x), везде maxDiff 1
+- C API (fastcv_c.h/fastcv_c.cpp) + rust/fastcv-sys: FFI-биндинги, 4/4 cargo test PASSED
+- Регрессионный сьют fastcv/tests/fastcv_test.cpp (14 проверок, включая порог perf): ALL PASS
+  (scripts/run-fastcv-tests.sh)
+- CROSSBUILD.md: пути Windows (mingw-w64, CUDA off) и ARM (NEON, lut_8u требует адаптации)
+
 ## Этап 6. Регрессионная верификация (bench/test_*.txt)
 - opencv_test_core ЦЕЛЕВОЙ (DFT/DCT/Mat/Gemm/LU/SVD/Eigen): 8100/8100 PASS на dispatch И stock
 - opencv_test_core ПОЛНЫЙ: 12415 OK (dispatch) / 12405 OK (stock), провалы ИДЕНТИЧНЫ: 7 шт.,

@@ -13,9 +13,11 @@ namespace fastcv {
 using namespace cv;
 
 void sobel8u16sLarge(const Mat& src, Mat& dst, int dx, int dy, int ksize) {
-    CV_Assert(src.type() == CV_8UC1 && ksize >= 3 && dx + dy > 0 && dx < ksize && dy < ksize);
-    dst.create(src.size(), CV_16SC1);
+    const int cn = src.channels();
+    CV_Assert((src.type() == CV_8UC1 || src.type() == CV_8UC3) && ksize >= 3 && dx + dy > 0 && dx < ksize && dy < ksize);
+    dst.create(src.size(), CV_MAKETYPE(CV_16S, cn));
     const int W = src.cols, H = src.rows;
+    const int Wc = W * cn;
     const int r = ksize / 2;
 
     // точные коэффициенты OpenCV (целые значения в float-векторах)
@@ -28,7 +30,7 @@ void sobel8u16sLarge(const Mat& src, Mat& dst, int dx, int dy, int ksize) {
     copyMakeBorder(src, padded, r, ksize - 1 - r, r, ksize - 1 - r, BORDER_REFLECT_101);
 
     // фаза 1: горизонталь (kernel X) -> int32 буфер
-    Mat hbuf(padded.rows, W, CV_32SC1);
+    Mat hbuf(padded.rows, Wc, CV_32SC1);
     parallel_for_(Range(0, padded.rows), [&](const Range& rg) {
         for (int y = rg.start; y < rg.end; y++) {
             const uchar* S = padded.ptr<uchar>(y);
@@ -36,10 +38,10 @@ void sobel8u16sLarge(const Mat& src, Mat& dst, int dx, int dy, int ksize) {
             int x = 0;
 #if CV_SIMD
             const int CN = v_uint16::nlanes;
-            for (; x <= W - CN; x += CN) {
+            for (; x <= Wc - CN; x += CN) {
                 v_int32 a0 = vx_setzero_s32(), a1 = vx_setzero_s32();
                 for (int k = 0; k < ksize; k++) {
-                    v_uint16 w = vx_load_expand(S + x + k);
+                    v_uint16 w = vx_load_expand(S + x + k * cn);
                     v_uint32 q0, q1;
                     v_expand(w, q0, q1);
                     v_int32 kk = vx_setall_s32((int)kx[k]);
@@ -50,9 +52,9 @@ void sobel8u16sLarge(const Mat& src, Mat& dst, int dx, int dy, int ksize) {
                 v_store(D + x + v_int32::nlanes, a1);
             }
 #endif
-            for (; x < W; x++) {
+            for (; x < Wc; x++) {
                 int s = 0;
-                for (int k = 0; k < ksize; k++) s += S[x + k] * (int)kx[k];
+                for (int k = 0; k < ksize; k++) s += S[x + k * cn] * (int)kx[k];
                 D[x] = s;
             }
         }
@@ -70,7 +72,7 @@ void sobel8u16sLarge(const Mat& src, Mat& dst, int dx, int dy, int ksize) {
                 int x = 0;
 #if CV_SIMD
                 const int NF = v_int32::nlanes;
-                for (; x <= W - 2 * NF; x += 2 * NF) {
+                for (; x <= Wc - 2 * NF; x += 2 * NF) {
                     v_int32 a0 = vx_setzero_s32(), a1 = vx_setzero_s32();
                     for (int k = 0; k < ksize; k++) {
                         const int* pr = hbuf.ptr<int>(y + k);
@@ -81,7 +83,7 @@ void sobel8u16sLarge(const Mat& src, Mat& dst, int dx, int dy, int ksize) {
                     v_store(dps + x, v_pack(a0, a1)); // saturating pack i32->i16
                 }
 #endif
-                for (; x < W; x++) {
+                for (; x < Wc; x++) {
                     int s = 0;
                     for (int k = 0; k < ksize; k++) s += hbuf.ptr<int>(y + k)[x] * (int)ky[k];
                     dps[x] = saturate_cast<short>(s);

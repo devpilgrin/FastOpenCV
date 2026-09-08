@@ -27,7 +27,17 @@ void bilateralGrid8u(const cv::Mat& src, cv::Mat& dst, int d,          // АПП
 void morphEllipseApprox8u(const cv::Mat& src, cv::Mat& dst,            // АППРОКСИМАЦИЯ (зонотоп 4 сегмента):
                           int ksize, int op);                          // имеет смысл только k>=31 (1.6x)
 void sobel8u16sLarge(const cv::Mat& src, cv::Mat& dst,                 // 3.8x (k=5) / 6.7x (k=7), bit-exact;
-                     int dx, int dy, int ksize);                       // для k=3 используйте cv::Sobel
+                     int dx, int dy, int ksize);                       // C1 и C3 (плоский проход); k=3 -> cv::Sobel
+void medianBlur8uC3(const cv::Mat& src, cv::Mat& dst, int ksize);      // 16.6x (C3 k=9), bit-exact
+void dftR2C(const cv::Mat& src, cv::Mat& dst);                         // FFTW r2c: 1.9x (1024) / 2.9x (2048)
+void dftC2C(const cv::Mat& src, cv::Mat& dst, bool inverse);           // FFTW c2c: 1.1x; maxDiff ~1e-3
+                                                                     // (нужна линковка -lfftw3f -lfftw3f_threads)
+// Photo-стилизации через ximgproc::dtFilter (photo-модуль cv использует скалярный
+// legacy Domain_Filter из npr.hpp с img.at<float>() - код 2011 года)
+void edgePreservingFast(const cv::Mat& src, cv::Mat& dst,              // RECURS 12.5x / NC 22.7x, maxDiff 1
+                        int flags, float sigma_s, float sigma_r);
+void detailEnhanceFast(const cv::Mat& src, cv::Mat& dst,               // 5.9x, maxDiff 1
+                       float sigma_s, float sigma_r);
 void laplacian8u16sLarge(const cv::Mat& src, cv::Mat& dst,             // 1.9x, bit-exact; ТОЛЬКО k=5
                          int ksize);                                   // (k=7 у cv float-путь - не трогаем)
 void adaptiveThreshold8u(const cv::Mat& src, cv::Mat& dst,             // GAUSS: 5.3-9.1x (99.95% px совпадают,
