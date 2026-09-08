@@ -37,6 +37,14 @@ Optimized OpenCV 4.14.0 build and a companion kernel library (`fastcv`) that rew
 | resize INTER_AREA x4 | 0.92 | 0.02-0.25 | **3.5-18.7x** | +/-1 on 0.2% px |
 | **undistort** (one-shot) | 9.9 | 0.87 | **11.4x** | bit-exact |
 | undistort RT (precomputed maps) | 9.9 | 0.52 | **19x** | bit-exact |
+| medianBlur 8UC3 k=9 | 105.7 | 6.4 | **16.6x** | bit-exact |
+| Sobel 8UC3 k=5 | 5.7 | 1.4 | **3.9x** | bit-exact |
+| edgePreservingFilter RECURS / NC | 174 / 496 | 14.0 / 21.8 | **12.5x / 22.7x** | maxDiff 1 |
+| detailEnhance | 138 | 23.5 | **5.9x** | maxDiff 1 |
+
+Photo-module filters (edgePreserving, detailEnhance, pencilSketch) use their own legacy scalar `Domain_Filter` (per-pixel `img.at<float>()`, 2011-era code) instead of the parallel `ximgproc::dtFilter` - fastcv re-routes them through dtFilter.
+
+Extras: `fastcv::dftR2C` (FFTW, +1.9-2.9x over the parallel DFT patch), C API (`fastcv_c.h`) + Rust crate `rust/fastcv-sys` (FFI, cargo-tested), regression suite `fastcv/tests/fastcv_test.cpp` (14 checks incl. perf thresholds).
 
 `cv::undistort` slices the frame into 2-row stripes (4096/cols) and calls `initUndistortRectifyMap`+`remap` ~540 times per frame. FastOpenCV computes maps once.
 
@@ -149,6 +157,13 @@ Apache 2.0 (same as OpenCV).
 | resize AREA x4 | 0.92 | 0.02-0.25 | **3.5-18.7x** |
 | **undistort** | 9.9 | 0.87 | **11.4x** (побитово) |
 | undistort RT (карты заранее) | 9.9 | 0.52 | **19x** |
+| medianBlur 8UC3 k=9 | 105.7 | 6.4 | **16.6x** (побитово) |
+| edgePreservingFilter RECURS / NC | 174 / 496 | 14.0 / 21.8 | **12.5x / 22.7x** |
+| detailEnhance | 138 | 23.5 | **5.9x** |
+
+Фильтры photo-модуля используют собственный скалярный `Domain_Filter` (per-pixel `img.at<float>()`, код 2011 года) вместо параллельного `ximgproc::dtFilter` - fastcv перенаправляет их на dtFilter.
+
+Дополнительно: `fastcv::dftR2C` (FFTW, +1.9-2.9x к параллельному патчу DFT), C API (`fastcv_c.h`) + Rust-крейт `rust/fastcv-sys`, регрессионный сьют `fastcv/tests/fastcv_test.cpp` (14 проверок, включая пороги производительности).
 
 `cv::undistort` режет кадр на полосы по 2 строки (4096/cols) и вызывает `initUndistortRectifyMap`+`remap` ~540 раз на кадр. FastOpenCV строит карты один раз.
 
