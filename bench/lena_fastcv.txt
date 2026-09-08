@@ -1,0 +1,3 @@
+terminate called after throwing an instance of 'cv::Exception'
+  what():  OpenCV(4.14.0) ../fastcv/src/sort_rows.cpp:29: error: (-215:Assertion failed) src.type() == CV_32FC1 in function 'sortIdxRows32f'
+

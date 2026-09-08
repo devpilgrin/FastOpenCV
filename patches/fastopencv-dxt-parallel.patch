@@ -1,0 +1,167 @@
+diff --git a/modules/core/src/dxt.cpp b/modules/core/src/dxt.cpp
+index 72861aa..b97fb69 100644
+--- a/modules/core/src/dxt.cpp
++++ b/modules/core/src/dxt.cpp
+@@ -1278,11 +1278,15 @@ RealDFT(const OcvDftOptions & c, const T* src, T* dst)
+         T scale2 = scale*(T)0.5;
+         int n2 = n >> 1;
+ 
+-        c.factors[0] >>= 1;
++        // FastOpenCV thread-safety: не мутируем shared c.factors - локальная копия
++        int facbuf[34];
++        memcpy(facbuf, c.factors, sizeof(int)*c.nf);
++        facbuf[0] >>= 1;
+ 
+         OcvDftOptions sub_c = c;
+-        sub_c.factors += (c.factors[0] == 1);
+-        sub_c.nf -= (c.factors[0] == 1);
++        sub_c.factors = facbuf;
++        sub_c.factors += (facbuf[0] == 1);
++        sub_c.nf -= (facbuf[0] == 1);
+         sub_c.isComplex = false;
+         sub_c.isInverse = false;
+         sub_c.noPermute = false;
+@@ -1291,8 +1295,6 @@ RealDFT(const OcvDftOptions & c, const T* src, T* dst)
+ 
+         DFT(sub_c, (Complex<T>*)src, (Complex<T>*)dst);
+ 
+-        c.factors[0] <<= 1;
+-
+         t = dst[0] - dst[1];
+         dst[0] = (dst[0] + dst[1])*scale;
+         dst[1] = t*scale;
+@@ -1493,11 +1495,15 @@ CCSIDFT(const OcvDftOptions & c, const T* src, T* dst)
+             }
+         }
+ 
+-        c.factors[0] >>= 1;
++        // FastOpenCV thread-safety: локальная копия factors вместо мутации shared
++        int facbuf[34];
++        memcpy(facbuf, c.factors, sizeof(int)*c.nf);
++        facbuf[0] >>= 1;
+ 
+         OcvDftOptions sub_c = c;
+-        sub_c.factors += (c.factors[0] == 1);
+-        sub_c.nf -= (c.factors[0] == 1);
++        sub_c.factors = facbuf;
++        sub_c.factors += (facbuf[0] == 1);
++        sub_c.nf -= (facbuf[0] == 1);
+         sub_c.isComplex = false;
+         sub_c.isInverse = false;
+         sub_c.noPermute = !inplace;
+@@ -1506,8 +1512,6 @@ CCSIDFT(const OcvDftOptions & c, const T* src, T* dst)
+ 
+         DFT(sub_c, (Complex<T>*)dst, (Complex<T>*)dst);
+ 
+-        c.factors[0] <<= 1;
+-
+         for( j = 0; j < n; j += 2 )
+         {
+             t0 = dst[j]*scale;
+@@ -3078,6 +3082,31 @@ protected:
+             nz = count;
+ 
+         int i;
++        // FastOpenCV: параллельный проход по строкам (per-worker tmp-буфер)
++        if( nz > 8 )
++        {
++            parallel_for_(Range(0, nz), [&](const Range& r) {
++                AutoBuffer<uchar> tmpLocal;
++                if( needBufferA )
++                    tmpLocal.allocate(len * complex_elem_size);
++                for( int ii = r.start; ii < r.end; ii++ )
++                {
++                    const uchar* sptr = src_data + src_step * ii;
++                    uchar* dptr0 = dst_data + dst_step * ii;
++                    uchar* dptr = dptr0;
++
++                    if( needBufferA )
++                        dptr = tmpLocal.data();
++
++                    contextA->apply(sptr, dptr);
++
++                    if( needBufferA )
++                        memcpy( dptr0, dptr + dptr_offset, dst_full_len );
++                }
++            });
++            i = nz;
++        }
++        else
+         for( i = 0; i < nz; i++ )
+         {
+             const uchar* sptr = src_data + src_step * i;
+@@ -3205,6 +3234,45 @@ protected:
+             }
+         }
+ 
++        // FastOpenCV: параллельный проход по парам столбцов (per-worker буферы)
++        if( b - a > 8 )
++        {
++            const uchar* sptrLoop = sptr0;
++            uchar* dptrLoop = dptr0;
++            parallel_for_(Range(0, (b - a + 1) / 2), [&](const Range& r) {
++                AutoBuffer<uchar> buf0L(len * complex_elem_size), buf1L(len * complex_elem_size), tmpBL;
++                if( needBufferB )
++                    tmpBL.allocate(len * complex_elem_size);
++                for( int p = r.start; p < r.end; p++ )
++                {
++                    int i = a + 2 * p;
++                    const uchar* sptr = sptrLoop + (size_t)(i - a) * complex_elem_size;
++                    uchar* dptr = dptrLoop + (size_t)(i - a) * complex_elem_size;
++                    uchar *dbuf0L = buf0L.data(), *dbuf1L = buf1L.data();
++                    if( needBufferB )
++                    {
++                        dbuf1L = tmpBL.data();
++                        dbuf0L = buf1L.data();
++                    }
++
++                    if( i+1 < b )
++                    {
++                        CopyFrom2Columns( sptr, src_step, buf0L.data(), buf1L.data(), len, complex_elem_size );
++                        contextB->apply(buf1L.data(), dbuf1L);
++                    }
++                    else
++                        CopyColumn( sptr, src_step, buf0L.data(), complex_elem_size, len, complex_elem_size );
++
++                    contextB->apply(buf0L.data(), dbuf0L);
++
++                    if( i+1 < b )
++                        CopyTo2Columns( dbuf0L, dbuf1L, dptr, dst_step, len, complex_elem_size );
++                    else
++                        CopyColumn( dbuf0L, complex_elem_size, dptr, dst_step, len, complex_elem_size );
++                }
++            });
++        }
++        else
+         for(int i = a; i < b; i += 2 )
+         {
+             if( i+1 < b )
+@@ -4363,6 +4431,28 @@ public:
+                 prev_len = len;
+             }
+             // otherwise reuse the tables calculated on the previous stage
++            // FastOpenCV: параллельный проход (per-worker src/dst буферы)
++            if( count > 8 )
++            {
++                parallel_for_(Range(0, count), [&](const Range& r) {
++                    AutoBuffer<uchar> srcL(len*elem_size), dstL;
++                    uchar* src_dft_l = srcL.data();
++                    uchar* dst_dft_l = dst_dft_buf ? 0 : srcL.data();
++                    if( dst_dft_buf )
++                    {
++                        dstL.allocate(len*elem_size);
++                        dst_dft_l = dstL.data();
++                    }
++                    else
++                        dst_dft_l = src_dft_l;
++                    for( unsigned i = r.start; i < (unsigned)r.end; i++ )
++                    {
++                        dct_func( opt, sptr + i*sstep0, sstep1, src_dft_l, dst_dft_l,
++                                  dptr + i*dstep0, dstep1, dct_wave.data());
++                    }
++                });
++            }
++            else
+             for(unsigned i = 0; i < static_cast<unsigned>(count); i++ )
+             {
+                 dct_func( opt, sptr + i*sstep0, sstep1, src_dft_buf, dst_dft_buf,

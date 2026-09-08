@@ -1,0 +1,17 @@
+[package]
+name = "fastopencv-bench"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+opencv = { version = "0.100", features = ["clang-runtime", "dnn", "cudaarithm", "cudaimgproc", "cudawarping", "cudafilters", "cudafeatures2d", "aruco", "tracking", "ximgproc"] }
+anyhow = "1"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+
+# Линковка с нашей оптимизированной сборкой OpenCV:
+# export OpenCV_DIR=/home/roman/workspace/FastOpemCV/install/linux-dispatch/lib/cmake/opencv4
+# (или PKG_CONFIG_PATH на install/linux-dispatch/lib/pkgconfig)

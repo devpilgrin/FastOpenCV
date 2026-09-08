@@ -1,0 +1,19 @@
+lena: 512x512
+operation                                ms      maxDiff
+medianBlur k=9                       5.0903            0
+bilateralFilter d=9                  1.0400            0
+bilateralGrid d=15 (approx)               -            -
+cornerHarris b=3                     0.3922            0
+resize CUBIC 512->256                0.1610            0
+filter2D 7x7 ->32F                   0.9084            0
+LUT инверсия                 0.0241            0
+sum                                  0.0017            0
+transform 3ch                        0.9913            0
+pow ^1.7 (rel)                       0.2483            0
+dft 512 (патч)                   1.0854            0
+dct 512 (патч)                   2.1371            0
+dilate ellipse k=31 (approx)         0.9533            0
+sortIdx rows (32F)                   5.5436            0
+gemm 512 (BLAS)                      9.3347            0
+SVD 256 (LAPACK)                    95.3360            0
+eigenSym 256 (fastcv)              249.4016            0

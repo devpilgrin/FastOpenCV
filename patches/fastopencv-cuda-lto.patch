@@ -1,0 +1,17 @@
+diff --git a/cmake/OpenCVDetectCUDAUtils.cmake b/cmake/OpenCVDetectCUDAUtils.cmake
+index 808f6bb..fdd65ff 100644
+--- a/cmake/OpenCVDetectCUDAUtils.cmake
++++ b/cmake/OpenCVDetectCUDAUtils.cmake
+@@ -336,6 +336,12 @@ macro(ocv_cuda_filter_options)
+   foreach(var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_DEBUG)
+     set(${var}_backup_in_cuda_compile_ "${${var}}")
+ 
++    # FastOpenCV: GCC LTO несовместим с fatbin-символами nvcc - host-заглушки
++    # .cu попадают в LTO-IR, и при слиянии ltrans-модулей ассемблер видит
++    # дубликаты fatbinData. Убираем -flto* только из host-компиляции CUDA;
++    # чистый C++ остаётся с LTO.
++    string(REGEX REPLACE "(^| )-flto(=[^ ]*)?( |$)" "\\1" ${var} "${${var}}")
++
+     if (CV_CLANG)
+       # we remove -Winconsistent-missing-override and -Qunused-arguments
+       # just in case we are compiling CUDA with gcc but OpenCV with clang

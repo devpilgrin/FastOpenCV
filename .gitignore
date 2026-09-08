@@ -1,0 +1,28 @@
+# Сборки и артефакты
+build/
+build-*/
+install/
+*.log
+
+# Тяжёлые сторонние исходники (клонируются по инструкции в README)
+third_party/opencv/
+third_party/opencv_contrib/
+third_party/opencv_extra/
+
+# Модели (скачиваются скриптом)
+models/*.onnx
+
+# Rust
+rust/*/target/
+
+# Системное
+*.o
+*.a
+*.so
+*~
+.DS_Store
+
+# Бинарники бенчей (пересобираются)
+bench/*
+!bench/*.cpp
+!bench/*.txt
