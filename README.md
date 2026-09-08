@@ -82,11 +82,15 @@ Rule: cheap filters -> CPU; heavy filters (bilateral, large box) -> GPU. Upload+
 
 | Backend | ms |
 |---|---|
-| OpenCV dnn CPU | 2.87 |
 | OpenCV dnn CUDA FP16 | **7.34 (worse than CPU)** |
+| OpenCV dnn CPU | 2.87 |
 | onnxruntime-cpu | 2.46 |
+| **TensorRT 11.2 FP32/TF32** | **0.166 (17x vs cv CPU)** |
+| **TensorRT 11.2 FP16** | **0.117 (25x vs cv CPU, 8241 fps)** |
 
-OpenCV's dnn CUDA backend should not be used; for GPU inference use onnxruntime + TensorRT EP.
+OpenCV's dnn CUDA backend should not be used; for GPU inference use TensorRT
+(`trtexec`; TRT 11 removed `--fp16` - strongly typed networks require an FP16 ONNX,
+see `scripts/onnx_to_fp16.py`).
 
 ## Honest rejections (measured, do not revisit)
 
