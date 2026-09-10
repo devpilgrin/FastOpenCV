@@ -26,3 +26,6 @@ rust/*/target/
 bench/*
 !bench/*.cpp
 !bench/*.txt
+
+# Внутренняя документация (не публикуется)
+internal/
